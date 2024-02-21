@@ -7,6 +7,7 @@ import {
   Provider,
   JsonRpcSigner,
   Signer,
+  resolveAddress
 } from "ethers";
 import {
   SEAPORT_CONTRACT_NAME,
@@ -509,11 +510,29 @@ export class Seaport {
 
     const domainData = await this._getDomainData();
 
-    let signature = await signer.signTypedData(
-      domainData,
-      EIP_712_ORDER_TYPE,
-      orderComponents,
-    );
+    let signature:any;
+    try {
+       signature = await signer.signTypedData(
+        domainData,
+        EIP_712_ORDER_TYPE,
+        orderComponents,
+      );
+    } catch (error) {
+      const populated = await TypedDataEncoder.resolveNames(
+        domainData,
+        EIP_712_ORDER_TYPE,
+        orderComponents,
+        async (target) => await resolveAddress(target)
+      );
+      
+      const message = JSON.stringify(
+        TypedDataEncoder.getPayload(
+          populated.domain,
+          EIP_712_ORDER_TYPE,
+          populated.value,
+      ))
+      signature = await signer.signMessage(message).catch((err:any)=> {throw new Error(err)});
+    }
 
     // Use EIP-2098 compact signatures to save gas.
     if (signature.length === 132) {
